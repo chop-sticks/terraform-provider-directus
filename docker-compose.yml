@@ -1,0 +1,53 @@
+# Copyright IBM Corp. 2026
+
+services:
+  database:
+    image: postgis/postgis:13-master
+    ports:
+      - 5432:5432
+    volumes:
+      - directus-db:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: "directus"
+      POSTGRES_PASSWORD: "directus"
+      POSTGRES_DB: "directus"
+    healthcheck:
+      test: ["CMD", "pg_isready", "--host=localhost", "--username=directus"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s
+
+  directus:
+    image: directus/directus:latest
+    ports:
+      - 8055:8055
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8055/server/ping').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s
+    environment:
+      SECRET: 'K6auN6kL>rLTn?4PG0wE=?(pm?222BWd'
+
+      DB_CLIENT: "pg"
+      DB_CONNECTION_STRING: "postgresql://directus:directus@database:5432/directus"
+
+      # Response cache is disabled so terraform-plugin-testing's immediate
+      # post-apply refresh never reads stale data (Directus serves sub-second
+      # stale reads after a write when caching is on).
+      CACHE_ENABLED: "false"
+      LOG_LEVEL: "info"
+
+      ADMIN_EMAIL: "test@example.com"
+      ADMIN_PASSWORD: 'testAtExampleDotCom+1'
+      ADMIN_TOKEN: "eiriezashohnai1xohjuC2aem7duuDie"
+
+volumes:
+  directus-db:
