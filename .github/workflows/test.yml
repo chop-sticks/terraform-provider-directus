@@ -81,7 +81,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       directus:
-        image: directus/directus:v12.3.0
+        image: directus/directus:12.3.0
         ports:
           - 8055:8055
         env:
