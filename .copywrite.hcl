@@ -10,7 +10,7 @@ project {
     ".idea/**/*.xml",
 
     # examples used within documentation (prose)
-    "examples/**",
+    # "examples/**",
 
     # golangci-lint tooling configuration
     ".golangci.yml",
