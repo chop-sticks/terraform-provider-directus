@@ -65,7 +65,7 @@ func (d *DirectusProvider) Configure(ctx context.Context, request provider.Confi
 	if url == "" {
 		response.Diagnostics.AddAttributeError(
 			path.Root("url"),
-			"Mising Directus URL",
+			"Missing Directus URL",
 			"The provider cannot create the Directus API client as there is a missing or empty value for the Directus URL. "+
 				"Set the url value in the configuration or use the DIRECTUS_URL environment variable. "+
 				"If either is already set, ensure the value is not empty.",
@@ -75,7 +75,7 @@ func (d *DirectusProvider) Configure(ctx context.Context, request provider.Confi
 
 	if config.Token.IsUnknown() {
 		response.Diagnostics.AddAttributeError(
-			path.Root("url"),
+			path.Root("token"),
 			"Unknown Directus Token",
 			"Directus Token must be known to configure the provider.")
 	}
@@ -91,6 +91,7 @@ func (d *DirectusProvider) Configure(ctx context.Context, request provider.Confi
 				"Set the token value in the configuration or use the DIRECTUS_TOKEN environment variable. "+
 				"If either is already set, ensure the value is not empty.",
 		)
+		return
 	}
 
 	client, err := directus.NewClient(&url, &token)
