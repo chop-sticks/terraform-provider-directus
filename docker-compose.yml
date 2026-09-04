@@ -20,7 +20,7 @@ services:
       start_period: 30s
 
   directus:
-    image: directus/directus:latest
+    image: directus/directus:12.3.0
     ports:
       - 8055:8055
     depends_on:
