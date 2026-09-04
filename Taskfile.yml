@@ -1,0 +1,128 @@
+# Copyright IBM Corp. 2026
+
+version: '3'
+
+# Task runner for terraform-provider-directus. Install Task: https://taskfile.dev
+# Run `task` (or `task --list`) to see available tasks.
+
+vars:
+  PKG: ./...
+
+tasks:
+  default:
+    desc: List all available tasks.
+    cmds:
+      - task --list
+    silent: true
+
+  build:
+    desc: Compile all packages.
+    cmds:
+      - go build -v {{.PKG}}
+
+  install:
+    desc: Build and install the provider binary.
+    cmds:
+      - go install -v {{.PKG}}
+
+  test:
+    desc: Run the unit test suite.
+    cmds:
+      - go test -cover -timeout=120s -parallel=10 {{.PKG}}
+
+  testacc:
+    desc: Run acceptance tests (TF_ACC) against a live Directus. Requires DIRECTUS_URL and DIRECTUS_TOKEN.
+    env:
+      TF_ACC: '1'
+    cmds:
+      - go test -v -timeout 120m -count=1 ./internal/provider/
+
+  testacc:local:
+    desc: Boot the Directus stack, run acceptance tests, then tear it down.
+    env:
+      TF_ACC: '1'
+      DIRECTUS_URL: '{{.DIRECTUS_URL | default "http://localhost:8055"}}'
+      DIRECTUS_TOKEN: '{{.DIRECTUS_TOKEN | default "eiriezashohnai1xohjuC2aem7duuDie"}}'
+    cmds:
+      - docker compose up -d --wait
+      # Healthcheck only proves /server/ping; poll until the admin token can
+      # actually perform a schema op before running acceptance tests.
+      - |
+        for i in $(seq 1 30); do
+          curl -sf -X POST "$DIRECTUS_URL/collections" \
+            -H "Authorization: Bearer $DIRECTUS_TOKEN" -H "Content-Type: application/json" \
+            -d '{"collection":"_ready_probe_","schema":{}}' | grep -q '"collection"' && break
+          sleep 2
+        done
+        curl -sf -X DELETE "$DIRECTUS_URL/collections/_ready_probe_" \
+          -H "Authorization: Bearer $DIRECTUS_TOKEN" >/dev/null 2>&1 || true
+      - defer: docker compose down -v
+      - go test -v -timeout 120m -count=1 ./internal/provider/
+
+  fmt:
+    desc: Format all Go source with gofmt.
+    cmds:
+      - gofmt -s -w -e .
+
+  fmt:check:
+    desc: Fail if any Go source is not gofmt-clean.
+    cmds:
+      - |
+        unformatted="$(gofmt -l .)"
+        if [ -n "$unformatted" ]; then
+          echo "These files are not gofmt-clean:"; echo "$unformatted"; exit 1
+        fi
+    silent: true
+
+  vet:
+    desc: Run go vet.
+    cmds:
+      - go vet {{.PKG}}
+
+  lint:
+    desc: Run golangci-lint (install from https://golangci-lint.run).
+    cmds:
+      - golangci-lint run
+
+  lint:fix:
+    desc: Run golangci-lint and auto-fix what it can.
+    cmds:
+      - golangci-lint run --fix
+
+  tidy:
+    desc: Tidy and verify go.mod / go.sum.
+    cmds:
+      - go mod tidy
+      - go mod verify
+
+  generate:
+    desc: Regenerate registry docs via tfplugindocs (go generate).
+    cmd: cd tools; go generate ./...
+
+  compose:up:
+    desc: Start the Directus stack in the background and wait until healthy.
+    cmds:
+      - docker compose up -d --wait
+
+  compose:down:
+    desc: Stop and remove the Directus stack.
+    cmds:
+      - docker compose down -v
+
+  compose:logs:
+    desc: Follow logs from the Directus stack.
+    cmds:
+      - docker compose logs -f
+
+  ci:
+    desc: Run the full local CI gate (format check, vet, lint, tests).
+    cmds:
+      - task: fmt:check
+      - task: vet
+      - task: lint
+      - task: test
+
+  clean:
+    desc: Remove build artifacts.
+    cmds:
+      - go clean
