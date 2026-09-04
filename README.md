@@ -33,9 +33,9 @@ provider "directus" {
 
 ### Provider configuration
 
-| Argument | Type   | Required | Env             | Description                                   |
-|----------|--------|----------|-----------------|-----------------------------------------------|
-| `url`    | string | yes\*    | `DIRECTUS_URL`   | Base URL of the Directus instance.           |
+| Argument | Type   | Required | Env              | Description                                   |
+|----------|--------|----------|------------------|-----------------------------------------------|
+| `url`    | string | yes\*    | `DIRECTUS_URL`   | Base URL of the Directus instance.            |
 | `token`  | string | yes\*    | `DIRECTUS_TOKEN` | Static access token (sent as a bearer token). |
 
 \* Each may be supplied via the argument **or** its environment variable. The
@@ -177,7 +177,7 @@ terraform import directus_settings.this 1
 **Data sources:** `directus_collection`, `directus_role`, `directus_policy`,
 `directus_folder`, `directus_user`, `directus_settings`, `directus_server_info`.
 
-Full attribute reference for each is generated under [`docs/`](docs/).
+Full attribute reference for each is generated under [`docs/`](./docs).
 
 ## Modeling notes
 
@@ -188,7 +188,7 @@ Full attribute reference for each is generated under [`docs/`](docs/).
   formatting and key order never cause drift.
 - **`directus_collection` always creates a table.** A schema-less collection is
   a restricted "folder" in Directus; `Create` always sends a `schema` object.
-- **Concurrent schema changes.** Creating several collections in a single apply
+- **Concurrent schema changes.** Creating several collections in a single applying
   can race Directus's schema cache. Serialize dependent schema mutations with
   `depends_on` when needed.
 - **`directus_folder` has no update endpoint** — changing `name`/`parent`
@@ -203,19 +203,19 @@ Full attribute reference for each is generated under [`docs/`](docs/).
 Common workflows are automated with [Task](https://taskfile.dev). Run `task` to
 list them:
 
-| Task | Description |
-|------|-------------|
-| `task build` | Compile all packages |
-| `task test` | Run the unit test suite |
-| `task testacc` | Run acceptance tests (`TF_ACC`) against a live Directus (needs `DIRECTUS_URL`/`DIRECTUS_TOKEN`) |
-| `task testacc:local` | Boot the local Directus stack, run acceptance tests, tear it down |
-| `task fmt` / `task fmt:check` | Format / check formatting |
-| `task vet` | Run `go vet` |
-| `task lint` | Run `golangci-lint` |
-| `task tidy` | Tidy & verify `go.mod`/`go.sum` |
-| `task generate` / `task docs` | Regenerate registry docs via `tfplugindocs` |
-| `task compose:up` / `task compose:down` | Start / stop the local Directus stack |
-| `task ci` | Full local gate: fmt check, vet, lint, tests |
+| Task                                    | Description                                                                                     |
+|-----------------------------------------|-------------------------------------------------------------------------------------------------|
+| `task build`                            | Compile all packages                                                                            |
+| `task test`                             | Run the unit test suite                                                                         |
+| `task testacc`                          | Run acceptance tests (`TF_ACC`) against a live Directus (needs `DIRECTUS_URL`/`DIRECTUS_TOKEN`) |
+| `task testacc:local`                    | Boot the local Directus stack, run acceptance tests, tear it down                               |
+| `task fmt` / `task fmt:check`           | Format / check formatting                                                                       |
+| `task vet`                              | Run `go vet`                                                                                    |
+| `task lint`                             | Run `golangci-lint`                                                                             |
+| `task tidy`                             | Tidy & verify `go.mod`/`go.sum`                                                                 |
+| `task generate` / `task docs`           | Regenerate registry docs via `tfplugindocs`                                                     |
+| `task compose:up` / `task compose:down` | Start / stop the local Directus stack                                                           |
+| `task ci`                               | Full local gate: fmt check, vet, lint, tests                                                    |
 
 ### Acceptance tests
 
