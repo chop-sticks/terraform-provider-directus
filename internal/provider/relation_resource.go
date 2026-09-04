@@ -123,10 +123,12 @@ func (r *relationResource) Create(ctx context.Context, request resource.CreateRe
 		return
 	}
 
-	created, err := r.client.CreateRelation(relationModelToClient(ctx, plan, &response.Diagnostics))
+	payload := relationModelToClient(ctx, plan, &response.Diagnostics)
 	if response.Diagnostics.HasError() {
 		return
 	}
+
+	created, err := r.client.CreateRelation(payload)
 	if err != nil {
 		response.Diagnostics.AddError("Error creating Directus relation", err.Error())
 		return
@@ -166,10 +168,12 @@ func (r *relationResource) Update(ctx context.Context, request resource.UpdateRe
 		return
 	}
 
-	updated, err := r.client.PatchRelation(plan.Collection.ValueString(), plan.Field.ValueString(), relationModelToClient(ctx, plan, &response.Diagnostics), nil)
+	payload := relationModelToClient(ctx, plan, &response.Diagnostics)
 	if response.Diagnostics.HasError() {
 		return
 	}
+
+	updated, err := r.client.PatchRelation(plan.Collection.ValueString(), plan.Field.ValueString(), payload, nil)
 	if err != nil {
 		response.Diagnostics.AddError("Error updating Directus relation", err.Error())
 		return

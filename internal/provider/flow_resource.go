@@ -83,10 +83,12 @@ func (r *flowResource) Create(ctx context.Context, request resource.CreateReques
 		return
 	}
 
-	created, err := r.client.CreateFlow(flowModelToClient(plan, &response.Diagnostics), nil)
+	flow := flowModelToClient(plan, &response.Diagnostics)
 	if response.Diagnostics.HasError() {
 		return
 	}
+
+	created, err := r.client.CreateFlow(flow, nil)
 	if err != nil {
 		response.Diagnostics.AddError("Error creating Directus flow", err.Error())
 		return
@@ -126,10 +128,12 @@ func (r *flowResource) Update(ctx context.Context, request resource.UpdateReques
 		return
 	}
 
-	updated, err := r.client.PatchFlow(plan.ID.ValueString(), flowModelToClient(plan, &response.Diagnostics), nil)
+	flow := flowModelToClient(plan, &response.Diagnostics)
 	if response.Diagnostics.HasError() {
 		return
 	}
+
+	updated, err := r.client.PatchFlow(plan.ID.ValueString(), flow, nil)
 	if err != nil {
 		response.Diagnostics.AddError("Error updating Directus flow", err.Error())
 		return

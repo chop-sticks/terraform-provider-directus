@@ -81,10 +81,12 @@ func (r *presetResource) Create(ctx context.Context, request resource.CreateRequ
 		return
 	}
 
-	created, err := r.client.CreatePreset(presetModelToClient(plan, &response.Diagnostics), nil)
+	preset := presetModelToClient(plan, &response.Diagnostics)
 	if response.Diagnostics.HasError() {
 		return
 	}
+
+	created, err := r.client.CreatePreset(preset, nil)
 	if err != nil {
 		response.Diagnostics.AddError("Error creating Directus preset", err.Error())
 		return
@@ -124,10 +126,12 @@ func (r *presetResource) Update(ctx context.Context, request resource.UpdateRequ
 		return
 	}
 
-	updated, err := r.client.PatchPreset(int(plan.ID.ValueInt64()), presetModelToClient(plan, &response.Diagnostics), nil)
+	preset := presetModelToClient(plan, &response.Diagnostics)
 	if response.Diagnostics.HasError() {
 		return
 	}
+
+	updated, err := r.client.PatchPreset(int(plan.ID.ValueInt64()), preset, nil)
 	if err != nil {
 		response.Diagnostics.AddError("Error updating Directus preset", err.Error())
 		return

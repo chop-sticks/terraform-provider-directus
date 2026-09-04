@@ -77,10 +77,12 @@ func (r *permissionResource) Create(ctx context.Context, request resource.Create
 		return
 	}
 
-	created, err := r.client.CreatePermission(permissionModelToClient(ctx, plan, &response.Diagnostics), nil)
+	permission := permissionModelToClient(ctx, plan, &response.Diagnostics)
 	if response.Diagnostics.HasError() {
 		return
 	}
+
+	created, err := r.client.CreatePermission(permission, nil)
 	if err != nil {
 		response.Diagnostics.AddError("Error creating Directus permission", err.Error())
 		return
@@ -120,10 +122,12 @@ func (r *permissionResource) Update(ctx context.Context, request resource.Update
 		return
 	}
 
-	updated, err := r.client.PatchPermission(int(plan.ID.ValueInt64()), permissionModelToClient(ctx, plan, &response.Diagnostics), nil)
+	permission := permissionModelToClient(ctx, plan, &response.Diagnostics)
 	if response.Diagnostics.HasError() {
 		return
 	}
+
+	updated, err := r.client.PatchPermission(int(plan.ID.ValueInt64()), permission, nil)
 	if err != nil {
 		response.Diagnostics.AddError("Error updating Directus permission", err.Error())
 		return

@@ -92,10 +92,12 @@ func (r *panelResource) Create(ctx context.Context, request resource.CreateReque
 		return
 	}
 
-	created, err := r.client.CreatePanel(panelModelToClient(plan, &response.Diagnostics), nil)
+	panel := panelModelToClient(plan, &response.Diagnostics)
 	if response.Diagnostics.HasError() {
 		return
 	}
+
+	created, err := r.client.CreatePanel(panel, nil)
 	if err != nil {
 		response.Diagnostics.AddError("Error creating Directus panel", err.Error())
 		return
@@ -135,10 +137,12 @@ func (r *panelResource) Update(ctx context.Context, request resource.UpdateReque
 		return
 	}
 
-	updated, err := r.client.PatchPanel(plan.ID.ValueString(), panelModelToClient(plan, &response.Diagnostics), nil)
+	panel := panelModelToClient(plan, &response.Diagnostics)
 	if response.Diagnostics.HasError() {
 		return
 	}
+
+	updated, err := r.client.PatchPanel(plan.ID.ValueString(), panel, nil)
 	if err != nil {
 		response.Diagnostics.AddError("Error updating Directus panel", err.Error())
 		return

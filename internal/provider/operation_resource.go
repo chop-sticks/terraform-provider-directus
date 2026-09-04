@@ -89,10 +89,12 @@ func (r *operationResource) Create(ctx context.Context, request resource.CreateR
 		return
 	}
 
-	created, err := r.client.CreateOperation(operationModelToClient(plan, &response.Diagnostics), nil)
+	payload := operationModelToClient(plan, &response.Diagnostics)
 	if response.Diagnostics.HasError() {
 		return
 	}
+
+	created, err := r.client.CreateOperation(payload, nil)
 	if err != nil {
 		response.Diagnostics.AddError("Error creating Directus operation", err.Error())
 		return
@@ -132,10 +134,12 @@ func (r *operationResource) Update(ctx context.Context, request resource.UpdateR
 		return
 	}
 
-	updated, err := r.client.PatchOperation(plan.ID.ValueString(), operationModelToClient(plan, &response.Diagnostics), nil)
+	payload := operationModelToClient(plan, &response.Diagnostics)
 	if response.Diagnostics.HasError() {
 		return
 	}
+
+	updated, err := r.client.PatchOperation(plan.ID.ValueString(), payload, nil)
 	if err != nil {
 		response.Diagnostics.AddError("Error updating Directus operation", err.Error())
 		return
