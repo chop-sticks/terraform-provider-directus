@@ -24,8 +24,8 @@ terraform {
 }
 
 provider "directus" {
-  url   = "http://localhost:8055"
-  token = "eiriezashohnai1xohjuC2aem7duuDie"
+  url   = "http://example.localhost:8055"
+  token = "secret_token"
 }
 
 data "directus_collection" "builtin_users" {
