@@ -128,7 +128,12 @@ func (r *relationResource) Create(ctx context.Context, request resource.CreateRe
 		return
 	}
 
+	// Serialize with all other schema writes (see schemaMu): relations create
+	// foreign-key DDL that is not concurrency-safe alongside collection/field
+	// creation.
+	schemaMu.Lock()
 	created, err := r.client.CreateRelation(payload)
+	schemaMu.Unlock()
 	if err != nil {
 		response.Diagnostics.AddError("Error creating Directus relation", err.Error())
 		return
@@ -173,7 +178,9 @@ func (r *relationResource) Update(ctx context.Context, request resource.UpdateRe
 		return
 	}
 
+	schemaMu.Lock()
 	updated, err := r.client.PatchRelation(plan.Collection.ValueString(), plan.Field.ValueString(), payload, nil)
+	schemaMu.Unlock()
 	if err != nil {
 		response.Diagnostics.AddError("Error updating Directus relation", err.Error())
 		return
@@ -189,7 +196,10 @@ func (r *relationResource) Delete(ctx context.Context, request resource.DeleteRe
 		return
 	}
 
-	if err := r.client.DeleteRelation(state.Collection.ValueString(), state.Field.ValueString()); err != nil {
+	schemaMu.Lock()
+	err := r.client.DeleteRelation(state.Collection.ValueString(), state.Field.ValueString())
+	schemaMu.Unlock()
+	if err != nil {
 		if isNotFound(err) {
 			return
 		}

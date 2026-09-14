@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/chop-sticks/directus-client-go/directus"
 	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
@@ -16,6 +17,16 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
+
+// schemaMu serializes schema-altering (DDL) operations across all resources in
+// this provider. Directus's schema endpoints are not concurrency-safe: creating
+// a collection with inline fields (POST /collections) concurrently with any
+// other schema write silently drops the inline fields, leaving a table with no
+// primary key that Directus then reports as "does not exist" (403) — an
+// unrecoverable state (the missing primary key cannot be added afterward).
+// Terraform applies resources in parallel, so every collection/field/relation
+// mutation takes this lock. Reads are safe and stay unlocked.
+var schemaMu sync.Mutex
 
 // mapToNormalized marshals a free-form Directus object into a jsontypes
 // Normalized value for storage in state. An empty/nil map becomes null so

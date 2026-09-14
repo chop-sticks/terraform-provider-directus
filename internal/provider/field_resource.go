@@ -142,11 +142,24 @@ func (r *fieldResource) Create(ctx context.Context, request resource.CreateReque
 		return
 	}
 
+	// Serialize with all other schema writes (see schemaMu): a concurrent field
+	// create races destructively against collection-with-inline-fields creates.
+	schemaMu.Lock()
 	created, err := r.client.CreateField(plan.Collection.ValueString(), field, nil)
+	schemaMu.Unlock()
 	if err != nil {
 		response.Diagnostics.AddError("Error creating Directus field", err.Error())
 		return
 	}
+
+	// Directus's POST /fields response echoes the request's identity (type,
+	// meta) but omits the server-derived schema. Backfill only the missing
+	// blocks from an authoritative read so configured Optional+Computed
+	// attributes are populated. Crucially, keep the echoed type: Directus
+	// canonicalizes type for relational/alias fields (e.g. a files field is
+	// stored as "alias"), and overwriting the plan's Required type here would
+	// trip "inconsistent result after apply".
+	backfillFieldFromServer(r.client, created, plan.Collection.ValueString(), plan.Field.ValueString())
 
 	response.Diagnostics.Append(response.State.Set(ctx, fieldToModel(ctx, created, plan.Meta != nil, plan.Schema != nil, &response.Diagnostics))...)
 }
@@ -187,11 +200,17 @@ func (r *fieldResource) Update(ctx context.Context, request resource.UpdateReque
 		return
 	}
 
+	schemaMu.Lock()
 	updated, err := r.client.PatchField(plan.Collection.ValueString(), plan.Field.ValueString(), field, nil)
+	schemaMu.Unlock()
 	if err != nil {
 		response.Diagnostics.AddError("Error updating Directus field", err.Error())
 		return
 	}
+
+	// See Create: PATCH /fields likewise omits the server-derived schema, so
+	// backfill the missing blocks while keeping the echoed (canonical) type.
+	backfillFieldFromServer(r.client, updated, plan.Collection.ValueString(), plan.Field.ValueString())
 
 	response.Diagnostics.Append(response.State.Set(ctx, fieldToModel(ctx, updated, plan.Meta != nil, plan.Schema != nil, &response.Diagnostics))...)
 }
@@ -203,7 +222,10 @@ func (r *fieldResource) Delete(ctx context.Context, request resource.DeleteReque
 		return
 	}
 
-	if err := r.client.DeleteField(state.Collection.ValueString(), state.Field.ValueString()); err != nil {
+	schemaMu.Lock()
+	err := r.client.DeleteField(state.Collection.ValueString(), state.Field.ValueString())
+	schemaMu.Unlock()
+	if err != nil {
 		if isNotFound(err) {
 			return
 		}
@@ -227,6 +249,30 @@ func (r *fieldResource) ImportState(ctx context.Context, request resource.Import
 	}
 	response.Diagnostics.Append(response.State.SetAttribute(ctx, path.Root("collection"), collection)...)
 	response.Diagnostics.Append(response.State.SetAttribute(ctx, path.Root("field"), field)...)
+}
+
+// backfillFieldFromServer fills in blocks that a write (POST/PATCH) /fields
+// response omits. Directus returns the created/updated field with its type and
+// meta echoed from the request but drops the server-derived schema; a follow-up
+// read is the only way to obtain it. Only nil blocks are copied over, so the
+// write response's canonical type (and any echoed meta) is preserved — avoiding
+// an "inconsistent result" when Directus canonicalizes a Required attribute.
+// A failed read is best-effort: the field was already written, so state falls
+// back to the (partial) write response rather than failing the apply.
+func backfillFieldFromServer(client *directus.Client, field *directus.Field, collection, name string) {
+	if field == nil || (field.Schema != nil && field.Meta != nil) {
+		return
+	}
+	refreshed, err := client.GetFieldByCollectionAndName(collection, name)
+	if err != nil || refreshed == nil {
+		return
+	}
+	if field.Schema == nil {
+		field.Schema = refreshed.Schema
+	}
+	if field.Meta == nil {
+		field.Meta = refreshed.Meta
+	}
 }
 
 // --- model <-> client mapping ---
