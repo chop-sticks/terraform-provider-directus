@@ -17,11 +17,13 @@ func TestAccCollectionResource(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCollectionConfig(name, "box", "created by acc test"),
+				Config: testAccCollectionConfig(name, "box", "created by acc test", ""),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("directus_collection.test", "collection", name),
 					resource.TestCheckResourceAttr("directus_collection.test", "meta.icon", "box"),
 					resource.TestCheckResourceAttr("directus_collection.test", "meta.note", "created by acc test"),
+					// collapse is unset in config; the schema default applies.
+					resource.TestCheckResourceAttr("directus_collection.test", "meta.collapse", "open"),
 				),
 			},
 			{
@@ -35,24 +37,29 @@ func TestAccCollectionResource(t *testing.T) {
 				ImportStateVerifyIgnore: []string{"meta", "schema"},
 			},
 			{
-				Config: testAccCollectionConfig(name, "database", "updated by acc test"),
+				Config: testAccCollectionConfig(name, "database", "updated by acc test", "https://example.com/{{id}}"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("directus_collection.test", "meta.icon", "database"),
 					resource.TestCheckResourceAttr("directus_collection.test", "meta.note", "updated by acc test"),
+					resource.TestCheckResourceAttr("directus_collection.test", "meta.preview_url", "https://example.com/{{id}}"),
 				),
 			},
 		},
 	})
 }
 
-func testAccCollectionConfig(name, icon, note string) string {
+func testAccCollectionConfig(name, icon, note, previewURL string) string {
+	previewLine := ""
+	if previewURL != "" {
+		previewLine = fmt.Sprintf("\n    preview_url = %q", previewURL)
+	}
 	return fmt.Sprintf(`
 resource "directus_collection" "test" {
   collection = %[1]q
   meta = {
     icon = %[2]q
-    note = %[3]q
+    note = %[3]q%[4]s
   }
 }
-`, name, icon, note)
+`, name, icon, note, previewLine)
 }
