@@ -4,11 +4,15 @@ package provider
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/chop-sticks/directus-client-go/directus"
+	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -33,6 +37,7 @@ type collectionResourceModel struct {
 	Collection types.String           `tfsdk:"collection"`
 	Meta       *collectionMetaModel   `tfsdk:"meta"`
 	Schema     *collectionSchemaModel `tfsdk:"schema"`
+	Fields     []collectionFieldModel `tfsdk:"fields"`
 }
 
 // collectionMetaModel exposes the commonly-managed directus_collections meta
@@ -49,6 +54,7 @@ type collectionMetaModel struct {
 	SortField       types.String `tfsdk:"sort_field"`
 	Group           types.String `tfsdk:"group"`
 	Collapse        types.String `tfsdk:"collapse"`
+	PreviewURL      types.String `tfsdk:"preview_url"`
 }
 
 // collectionSchemaModel mirrors the underlying database table info. Name is
@@ -58,6 +64,48 @@ type collectionSchemaModel struct {
 	Name    types.String `tfsdk:"name"`
 	Schema  types.String `tfsdk:"schema"`
 	Comment types.String `tfsdk:"comment"`
+}
+
+// collectionFieldModel describes an initial field created alongside the
+// collection (POST /collections "fields"). It is a create-only input: Directus
+// never returns "fields" on collection reads, so these values are stored as
+// configured and preserved across Read/Update rather than reconciled from the
+// server. Changing them forces a new resource.
+type collectionFieldModel struct {
+	Field  types.String                `tfsdk:"field"`
+	Type   types.String                `tfsdk:"type"`
+	Meta   *collectionFieldMetaModel   `tfsdk:"meta"`
+	Schema *collectionFieldSchemaModel `tfsdk:"schema"`
+}
+
+type collectionFieldMetaModel struct {
+	Interface         types.String         `tfsdk:"interface"`
+	Display           types.String         `tfsdk:"display"`
+	Note              types.String         `tfsdk:"note"`
+	Width             types.String         `tfsdk:"width"`
+	Group             types.String         `tfsdk:"group"`
+	Hidden            types.Bool           `tfsdk:"hidden"`
+	Readonly          types.Bool           `tfsdk:"readonly"`
+	Required          types.Bool           `tfsdk:"required"`
+	Sort              types.Int64          `tfsdk:"sort"`
+	Special           types.List           `tfsdk:"special"`
+	Options           jsontypes.Normalized `tfsdk:"options"`
+	DisplayOptions    jsontypes.Normalized `tfsdk:"display_options"`
+	Validation        jsontypes.Normalized `tfsdk:"validation"`
+	ValidationMessage types.String         `tfsdk:"validation_message"`
+}
+
+type collectionFieldSchemaModel struct {
+	DataType         types.String         `tfsdk:"data_type"`
+	DefaultValue     jsontypes.Normalized `tfsdk:"default_value"`
+	MaxLength        types.Int64          `tfsdk:"max_length"`
+	NumericPrecision types.Int64          `tfsdk:"numeric_precision"`
+	NumericScale     types.Int64          `tfsdk:"numeric_scale"`
+	IsNullable       types.Bool           `tfsdk:"is_nullable"`
+	IsUnique         types.Bool           `tfsdk:"is_unique"`
+	IsPrimaryKey     types.Bool           `tfsdk:"is_primary_key"`
+	HasAutoIncrement types.Bool           `tfsdk:"has_auto_increment"`
+	Comment          types.String         `tfsdk:"comment"`
 }
 
 func (r *collectionResource) Metadata(_ context.Context, request resource.MetadataRequest, response *resource.MetadataResponse) {
@@ -87,7 +135,8 @@ func (r *collectionResource) Schema(_ context.Context, _ resource.SchemaRequest,
 					"singleton":        optionalComputedBool("Whether the collection is a singleton."),
 					"sort_field":       optionalComputedString("Field used for manual sorting."),
 					"group":            optionalComputedString("Parent collection for nesting in the app."),
-					"collapse":         optionalComputedString("Default collapse behavior in the app (open, closed, locked)."),
+					"collapse":         optionalComputedStringDefault("Default collapse behavior in the app (open, closed, locked).", "open"),
+					"preview_url":      optionalComputedString("URL template used to preview items (e.g. a live site URL)."),
 				},
 			},
 			"schema": schema.SingleNestedAttribute{
@@ -97,6 +146,63 @@ func (r *collectionResource) Schema(_ context.Context, _ resource.SchemaRequest,
 					"name":    computedString("Table name (equals the collection name)."),
 					"schema":  optionalComputedString("Database schema the table belongs to."),
 					"comment": optionalComputedString("Database-level comment on the table."),
+				},
+			},
+			"fields": schema.ListNestedAttribute{
+				MarkdownDescription: "Initial fields to create alongside the collection (POST /collections). " +
+					"Typically used to define the collection's primary key/ID field. Only applied at " +
+					"creation and never read back from Directus, so changing this forces a new resource.",
+				Optional: true,
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.RequiresReplace(),
+				},
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"field": schema.StringAttribute{
+							MarkdownDescription: "Field (column) name, e.g. \"id\".",
+							Required:            true,
+						},
+						"type": schema.StringAttribute{
+							MarkdownDescription: "Directus field type (e.g. integer, uuid, string).",
+							Required:            true,
+						},
+						"meta": schema.SingleNestedAttribute{
+							MarkdownDescription: "Directus field metadata (directus_fields).",
+							Optional:            true,
+							Attributes: map[string]schema.Attribute{
+								"interface":          optionalString("Interface id used to edit the field."),
+								"display":            optionalString("Display id used to render the field."),
+								"note":               optionalString("Help note shown under the field."),
+								"width":              optionalString("Field width in the app form (half, full, ...)."),
+								"group":              optionalString("Field group this field is nested under."),
+								"hidden":             optionalBool("Whether the field is hidden in the app."),
+								"readonly":           optionalBool("Whether the field is read-only in the app."),
+								"required":           optionalBool("Whether the field is required in the app."),
+								"sort":               optionalInt64("Sort order of the field in the app."),
+								"special":            optionalStringList("Special Directus behaviors (e.g. uuid, cast-json, m2o)."),
+								"options":            optionalNormalizedJSON("Interface-specific options as a JSON object."),
+								"display_options":    optionalNormalizedJSON("Display-specific options as a JSON object."),
+								"validation":         optionalNormalizedJSON("Validation filter rules as a JSON object."),
+								"validation_message": optionalString("Custom validation error message."),
+							},
+						},
+						"schema": schema.SingleNestedAttribute{
+							MarkdownDescription: "Underlying database column definition.",
+							Optional:            true,
+							Attributes: map[string]schema.Attribute{
+								"data_type":          optionalString("Database column data type (e.g. integer, uuid, varchar)."),
+								"default_value":      optionalNormalizedJSON("Column default value as JSON (string, number, bool, or null)."),
+								"max_length":         optionalInt64("Maximum length for string columns."),
+								"numeric_precision":  optionalInt64("Numeric precision for numeric columns."),
+								"numeric_scale":      optionalInt64("Numeric scale for numeric columns."),
+								"is_nullable":        optionalBool("Whether the column allows NULL."),
+								"is_unique":          optionalBool("Whether the column has a unique constraint."),
+								"is_primary_key":     optionalBool("Whether the column is the primary key."),
+								"has_auto_increment": optionalBool("Whether the column auto-increments (auto-increment integer ID)."),
+								"comment":            optionalString("Database-level column comment."),
+							},
+						},
+					},
 				},
 			},
 		},
@@ -117,18 +223,27 @@ func (r *collectionResource) Create(ctx context.Context, request resource.Create
 		Collection: plan.Collection.ValueString(),
 		Meta:       metaModelToRequest(plan.Meta),
 		Schema:     schemaModelToRequest(plan.Schema),
+		Fields:     collectionFieldsToRequest(ctx, plan.Fields, plan.Collection.ValueString(), &response.Diagnostics),
+	}
+	if response.Diagnostics.HasError() {
+		return
 	}
 	if req.Schema == nil {
 		req.Schema = &directus.CollectionSchema{}
 	}
 
-	created, err := r.client.CreateCollection(req, nil)
+	// Serialize with all other schema writes: creating a collection with inline
+	// fields races destructively against concurrent DDL (see schemaMu).
+	schemaMu.Lock()
+	defer schemaMu.Unlock()
+
+	created, err := createCollectionVerified(r.client, req)
 	if err != nil {
 		response.Diagnostics.AddError("Error creating Directus collection", err.Error())
 		return
 	}
 
-	response.Diagnostics.Append(response.State.Set(ctx, collectionToModel(created, plan.Meta != nil, plan.Schema != nil))...)
+	response.Diagnostics.Append(response.State.Set(ctx, collectionToModel(created, plan.Meta != nil, plan.Schema != nil, plan.Fields))...)
 }
 
 func (r *collectionResource) Read(ctx context.Context, request resource.ReadRequest, response *resource.ReadResponse) {
@@ -152,7 +267,7 @@ func (r *collectionResource) Read(ctx context.Context, request resource.ReadRequ
 		return
 	}
 
-	response.Diagnostics.Append(response.State.Set(ctx, collectionToModel(col, state.Meta != nil, state.Schema != nil))...)
+	response.Diagnostics.Append(response.State.Set(ctx, collectionToModel(col, state.Meta != nil, state.Schema != nil, state.Fields))...)
 }
 
 func (r *collectionResource) Update(ctx context.Context, request resource.UpdateRequest, response *resource.UpdateResponse) {
@@ -168,13 +283,15 @@ func (r *collectionResource) Update(ctx context.Context, request resource.Update
 		Schema:     schemaModelToRequest(plan.Schema),
 	}
 
+	schemaMu.Lock()
 	updated, err := r.client.PatchCollection(plan.Collection.ValueString(), req, nil)
+	schemaMu.Unlock()
 	if err != nil {
 		response.Diagnostics.AddError("Error updating Directus collection", err.Error())
 		return
 	}
 
-	response.Diagnostics.Append(response.State.Set(ctx, collectionToModel(updated, plan.Meta != nil, plan.Schema != nil))...)
+	response.Diagnostics.Append(response.State.Set(ctx, collectionToModel(updated, plan.Meta != nil, plan.Schema != nil, plan.Fields))...)
 }
 
 func (r *collectionResource) Delete(ctx context.Context, request resource.DeleteRequest, response *resource.DeleteResponse) {
@@ -184,7 +301,10 @@ func (r *collectionResource) Delete(ctx context.Context, request resource.Delete
 		return
 	}
 
-	if err := r.client.DeleteCollection(state.Collection.ValueString()); err != nil {
+	schemaMu.Lock()
+	err := r.client.DeleteCollection(state.Collection.ValueString())
+	schemaMu.Unlock()
+	if err != nil {
 		if isNotFound(err) {
 			return
 		}
@@ -216,6 +336,7 @@ func metaModelToRequest(m *collectionMetaModel) *directus.CollectionMeta {
 		SortField:       m.SortField.ValueString(),
 		Group:           m.Group.ValueString(),
 		Collapse:        m.Collapse.ValueString(),
+		PreviewURL:      m.PreviewURL.ValueString(),
 	}
 }
 
@@ -233,10 +354,13 @@ func schemaModelToRequest(s *collectionSchemaModel) *directus.CollectionSchema {
 // collectionToModel maps the client type into the resource model. includeMeta
 // and includeSchema control whether the nested blocks are populated: they are
 // only tracked in state when the user manages them, so an unmanaged (omitted)
-// block stays null and does not produce a perpetual diff.
-func collectionToModel(col *directus.Collection, includeMeta, includeSchema bool) collectionResourceModel {
+// block stays null and does not produce a perpetual diff. fields is carried
+// through verbatim: Directus never returns a collection's create-time "fields",
+// so the configured/prior-state value is preserved as-is.
+func collectionToModel(col *directus.Collection, includeMeta, includeSchema bool, fields []collectionFieldModel) collectionResourceModel {
 	model := collectionResourceModel{
 		Collection: types.StringValue(col.Collection),
+		Fields:     fields,
 	}
 	if includeMeta && col.Meta != nil {
 		model.Meta = &collectionMetaModel{
@@ -249,6 +373,7 @@ func collectionToModel(col *directus.Collection, includeMeta, includeSchema bool
 			SortField:       types.StringValue(col.Meta.SortField),
 			Group:           types.StringValue(col.Meta.Group),
 			Collapse:        types.StringValue(col.Meta.Collapse),
+			PreviewURL:      types.StringValue(col.Meta.PreviewURL),
 		}
 	}
 	if includeSchema && col.Schema != nil {
@@ -259,4 +384,111 @@ func collectionToModel(col *directus.Collection, includeMeta, includeSchema bool
 		}
 	}
 	return model
+}
+
+// collectionFieldsToRequest builds the create-only "fields" payload for POST
+// /collections. Each entry's collection and schema table name are stamped from
+// the parent collection so the payload is internally consistent, matching what
+// Directus expects when creating fields inline.
+func collectionFieldsToRequest(ctx context.Context, fields []collectionFieldModel, collection string, diags *diag.Diagnostics) []directus.Field {
+	if len(fields) == 0 {
+		return nil
+	}
+	out := make([]directus.Field, 0, len(fields))
+	for _, f := range fields {
+		field := directus.Field{
+			Collection: collection,
+			Field:      f.Field.ValueString(),
+			Type:       f.Type.ValueString(),
+		}
+		if f.Meta != nil {
+			meta := &directus.FieldMeta{
+				Collection:        collection,
+				Field:             f.Field.ValueString(),
+				Interface:         f.Meta.Interface.ValueString(),
+				Display:           f.Meta.Display.ValueString(),
+				Note:              f.Meta.Note.ValueString(),
+				Width:             f.Meta.Width.ValueString(),
+				Group:             f.Meta.Group.ValueString(),
+				Hidden:            f.Meta.Hidden.ValueBool(),
+				Readonly:          f.Meta.Readonly.ValueBool(),
+				Required:          f.Meta.Required.ValueBool(),
+				Sort:              int(f.Meta.Sort.ValueInt64()),
+				Options:           normalizedToMap(f.Meta.Options, diags),
+				DisplayOptions:    normalizedToMap(f.Meta.DisplayOptions, diags),
+				Validation:        normalizedToMap(f.Meta.Validation, diags),
+				ValidationMessage: f.Meta.ValidationMessage.ValueString(),
+			}
+			if !f.Meta.Special.IsNull() && !f.Meta.Special.IsUnknown() {
+				diags.Append(f.Meta.Special.ElementsAs(ctx, &meta.Special, false)...)
+			}
+			field.Meta = meta
+		}
+		if f.Schema != nil {
+			field.Schema = &directus.FieldSchema{
+				Name:             f.Field.ValueString(),
+				Table:            collection,
+				DataType:         f.Schema.DataType.ValueString(),
+				DefaultValue:     normalizedToAny(f.Schema.DefaultValue, diags),
+				MaxLength:        int(f.Schema.MaxLength.ValueInt64()),
+				NumericPrecision: int(f.Schema.NumericPrecision.ValueInt64()),
+				NumericScale:     int(f.Schema.NumericScale.ValueInt64()),
+				IsNullable:       f.Schema.IsNullable.ValueBool(),
+				IsUnique:         f.Schema.IsUnique.ValueBool(),
+				IsPrimaryKey:     f.Schema.IsPrimaryKey.ValueBool(),
+				HasAutoIncrement: f.Schema.HasAutoIncrement.ValueBool(),
+				Comment:          f.Schema.Comment.ValueString(),
+			}
+		}
+		out = append(out, field)
+	}
+	return out
+}
+
+// createCollectionVerified creates a collection and, when the request carries
+// inline fields, confirms they were actually created. Directus can return 200
+// from POST /collections while silently dropping the inline fields, leaving a
+// primary-key-less table it then reports as "does not exist" (403) — a state
+// that cannot be repaired in place (the missing primary key cannot be added
+// afterward). The caller holds schemaMu, so no concurrent DDL interferes and a
+// dropped-field result is a transient server fault that delete+recreate clears.
+// The broken collection is always removed before returning an error, leaving no
+// orphan to block a later apply.
+func createCollectionVerified(client *directus.Client, req *directus.CollectionRequest) (*directus.Collection, error) {
+	const attempts = 3
+	var lastErr error
+	for range attempts {
+		created, err := client.CreateCollection(req, nil)
+		if err != nil {
+			return nil, err
+		}
+		if len(req.Fields) == 0 {
+			return created, nil
+		}
+		if lastErr = collectionMissingFields(client, req.Collection, req.Fields); lastErr == nil {
+			return created, nil
+		}
+		_ = client.DeleteCollection(req.Collection)
+	}
+	return nil, fmt.Errorf("collection %q was created without its configured fields after %d attempts (Directus dropped the inline field payload): %w", req.Collection, attempts, lastErr)
+}
+
+// collectionMissingFields returns a non-nil error when any requested field is
+// absent from the collection. A collection lacking its primary key answers
+// field reads with a 403 "does not exist", which surfaces here as that error.
+func collectionMissingFields(client *directus.Client, collection string, want []directus.Field) error {
+	got, err := client.GetFieldsByCollection(collection)
+	if err != nil {
+		return err
+	}
+	present := make(map[string]struct{}, len(got))
+	for _, f := range got {
+		present[f.Field] = struct{}{}
+	}
+	for _, f := range want {
+		if _, ok := present[f.Field]; !ok {
+			return fmt.Errorf("field %q was not created", f.Field)
+		}
+	}
+	return nil
 }

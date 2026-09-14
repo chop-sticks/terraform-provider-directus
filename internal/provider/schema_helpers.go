@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -24,6 +25,16 @@ func optionalComputedString(desc string) schema.StringAttribute {
 		MarkdownDescription: desc,
 		Optional:            true,
 		Computed:            true,
+		PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+	}
+}
+
+func optionalComputedStringDefault(desc, def string) schema.StringAttribute {
+	return schema.StringAttribute{
+		MarkdownDescription: desc,
+		Optional:            true,
+		Computed:            true,
+		Default:             stringdefault.StaticString(def),
 		PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 	}
 }
@@ -80,4 +91,29 @@ func computedBool(desc string) schema.BoolAttribute {
 		Computed:            true,
 		PlanModifiers:       []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
 	}
+}
+
+// Plain Optional constructors (no Computed) for attributes the server never
+// reconciles back into state — e.g. a collection's create-only "fields" input.
+// Making these Computed would leave unset values unknown after apply with no
+// Read to resolve them, producing "inconsistent result" errors.
+
+func optionalString(desc string) schema.StringAttribute {
+	return schema.StringAttribute{MarkdownDescription: desc, Optional: true}
+}
+
+func optionalBool(desc string) schema.BoolAttribute {
+	return schema.BoolAttribute{MarkdownDescription: desc, Optional: true}
+}
+
+func optionalInt64(desc string) schema.Int64Attribute {
+	return schema.Int64Attribute{MarkdownDescription: desc, Optional: true}
+}
+
+func optionalStringList(desc string) schema.ListAttribute {
+	return schema.ListAttribute{MarkdownDescription: desc, ElementType: types.StringType, Optional: true}
+}
+
+func optionalNormalizedJSON(desc string) schema.StringAttribute {
+	return schema.StringAttribute{MarkdownDescription: desc, CustomType: jsontypes.NormalizedType{}, Optional: true}
 }
