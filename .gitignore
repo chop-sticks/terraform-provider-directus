@@ -28,5 +28,11 @@ go.work.sum
 .env
 
 # Editor/IDE
-# .idea/
+.idea/
 # .vscode/
+
+# Terraform (example configs / local runs)
+**/.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
