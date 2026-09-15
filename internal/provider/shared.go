@@ -194,6 +194,28 @@ func relationGone(client *directus.Client, collection, field string, readErr err
 	return true
 }
 
+// accessGone reports whether an access read error means the record no longer
+// exists (404, or a 403 with the id absent from the access listing). Like the
+// schema endpoints, Directus answers a missing directus_access row with 403.
+func accessGone(client *directus.Client, id string, readErr error) bool {
+	if isNotFound(readErr) {
+		return true
+	}
+	if !isForbidden(readErr) {
+		return false
+	}
+	list, err := client.GetAccesses(nil)
+	if err != nil {
+		return false
+	}
+	for _, a := range list {
+		if a.ID == id {
+			return false
+		}
+	}
+	return true
+}
+
 // anyToStringID normalizes a Directus relational field into a string id.
 // Directus returns either a bare id string or an expanded object (with an "id"
 // key) depending on the request's fields; unset relations come back nil. Used

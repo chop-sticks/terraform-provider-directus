@@ -31,6 +31,9 @@ type userResourceModel struct {
 	ID                 types.String `tfsdk:"id"`
 	Email              types.String `tfsdk:"email"`
 	Password           types.String `tfsdk:"password"`
+	PasswordVersion    types.String `tfsdk:"password_version"`
+	Token              types.String `tfsdk:"token"`
+	TokenVersion       types.String `tfsdk:"token_version"`
 	FirstName          types.String `tfsdk:"first_name"`
 	LastName           types.String `tfsdk:"last_name"`
 	Status             types.String `tfsdk:"status"`
@@ -68,9 +71,26 @@ func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, respo
 				Required:            true,
 			},
 			"password": schema.StringAttribute{
-				MarkdownDescription: "User password. Write-only; never read back from the API.",
+				MarkdownDescription: "User password. Write-only: sent to Directus on create/update but never stored in state or read back. " +
+					"Because Terraform can't diff a value it doesn't store, bump `password_version` (alongside changing `password`) to apply a new password.",
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
+			},
+			"password_version": schema.StringAttribute{
+				MarkdownDescription: "Arbitrary trigger for `password`. Change it whenever you change `password` so Terraform runs an update and re-sends the value.",
 				Optional:            true,
-				Sensitive:           true,
+			},
+			"token": schema.StringAttribute{
+				MarkdownDescription: "Static access token for the user. Write-only: sent on create/update but never stored in state or read back. " +
+					"Bump `token_version` (alongside changing `token`) to apply a new token.",
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
+			},
+			"token_version": schema.StringAttribute{
+				MarkdownDescription: "Arbitrary trigger for `token`. Change it whenever you change `token` so Terraform runs an update and re-sends the value.",
+				Optional:            true,
 			},
 			"first_name":          optionalComputedString("First name."),
 			"last_name":           optionalComputedString("Last name."),
@@ -98,7 +118,17 @@ func (r *userResource) Create(ctx context.Context, request resource.CreateReques
 		return
 	}
 
-	created, err := r.client.CreateUser(userModelToClient(ctx, plan, &response.Diagnostics), nil)
+	// Write-only attributes (password, token) are null in the plan; read them
+	// from the config, which is the only place their values are available.
+	var config userResourceModel
+	response.Diagnostics.Append(request.Config.Get(ctx, &config)...)
+	if response.Diagnostics.HasError() {
+		return
+	}
+
+	user := userModelToClient(ctx, plan, &response.Diagnostics)
+	applyWriteOnlyCredentials(user, config)
+	created, err := r.client.CreateUser(user, nil)
 	if response.Diagnostics.HasError() {
 		return
 	}
@@ -108,7 +138,10 @@ func (r *userResource) Create(ctx context.Context, request resource.CreateReques
 	}
 
 	model := userToModel(ctx, created, &response.Diagnostics)
-	model.Password = plan.Password
+	// password/token are write-only and must stay null in state; only the
+	// version triggers are persisted.
+	model.PasswordVersion = plan.PasswordVersion
+	model.TokenVersion = plan.TokenVersion
 	response.Diagnostics.Append(response.State.Set(ctx, model)...)
 }
 
@@ -134,8 +167,10 @@ func (r *userResource) Read(ctx context.Context, request resource.ReadRequest, r
 	}
 
 	model := userToModel(ctx, user, &response.Diagnostics)
-	// Password is write-only; the API never returns it, so preserve state.
-	model.Password = state.Password
+	// password/token are write-only: never returned by the API and never stored.
+	// Only the version triggers persist, so carry them over from prior state.
+	model.PasswordVersion = state.PasswordVersion
+	model.TokenVersion = state.TokenVersion
 	response.Diagnostics.Append(response.State.Set(ctx, model)...)
 }
 
@@ -146,7 +181,15 @@ func (r *userResource) Update(ctx context.Context, request resource.UpdateReques
 		return
 	}
 
-	updated, err := r.client.PatchUser(plan.ID.ValueString(), userModelToClient(ctx, plan, &response.Diagnostics), nil)
+	var config userResourceModel
+	response.Diagnostics.Append(request.Config.Get(ctx, &config)...)
+	if response.Diagnostics.HasError() {
+		return
+	}
+
+	user := userModelToClient(ctx, plan, &response.Diagnostics)
+	applyWriteOnlyCredentials(user, config)
+	updated, err := r.client.PatchUser(plan.ID.ValueString(), user, nil)
 	if response.Diagnostics.HasError() {
 		return
 	}
@@ -156,7 +199,8 @@ func (r *userResource) Update(ctx context.Context, request resource.UpdateReques
 	}
 
 	model := userToModel(ctx, updated, &response.Diagnostics)
-	model.Password = plan.Password
+	model.PasswordVersion = plan.PasswordVersion
+	model.TokenVersion = plan.TokenVersion
 	response.Diagnostics.Append(response.State.Set(ctx, model)...)
 }
 
@@ -188,7 +232,6 @@ func (r *userResource) ImportState(ctx context.Context, request resource.ImportS
 func userModelToClient(ctx context.Context, m userResourceModel, diags *diag.Diagnostics) *directus.User {
 	user := &directus.User{
 		Email:              m.Email.ValueString(),
-		Password:           m.Password.ValueString(),
 		FirstName:          m.FirstName.ValueString(),
 		LastName:           m.LastName.ValueString(),
 		Status:             m.Status.ValueString(),
@@ -209,6 +252,20 @@ func userModelToClient(ctx context.Context, m userResourceModel, diags *diag.Dia
 		diags.Append(m.Tags.ElementsAs(ctx, &user.Tags, false)...)
 	}
 	return user
+}
+
+// applyWriteOnlyCredentials copies the write-only password/token from the
+// config-sourced model onto the outgoing client payload. They live only in the
+// config (null in plan/state), so they are applied here and never round-trip
+// through state. Empty/unset values are omitted (User's json omitempty), so an
+// unrelated update never clobbers an existing password or token.
+func applyWriteOnlyCredentials(user *directus.User, config userResourceModel) {
+	if !config.Password.IsNull() && !config.Password.IsUnknown() {
+		user.Password = config.Password.ValueString()
+	}
+	if !config.Token.IsNull() && !config.Token.IsUnknown() {
+		user.Token = config.Token.ValueString()
+	}
 }
 
 func userToModel(ctx context.Context, u *directus.User, diags *diag.Diagnostics) userResourceModel {
