@@ -119,6 +119,7 @@ func (d *DirectusProvider) DataSources(ctx context.Context) []func() datasource.
 		UserDataSource,
 		SettingsDataSource,
 		ServerInfoDataSource,
+		AccessDataSource,
 	}
 }
 
@@ -139,6 +140,7 @@ func (d *DirectusProvider) Resources(ctx context.Context) []func() resource.Reso
 		PermissionResource,
 		SettingsResource,
 		UserResource,
+		AccessResource,
 	}
 }
 
