@@ -21,6 +21,8 @@ Manages a Directus user (directus_users).
 
 ### Optional
 
+> **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
+
 - `appearance` (String) Appearance preference (auto, light, dark).
 - `description` (String) Description/bio.
 - `email_notifications` (Boolean) Whether the user receives email notifications.
@@ -29,13 +31,16 @@ Manages a Directus user (directus_users).
 - `language` (String) Preferred language code.
 - `last_name` (String) Last name.
 - `location` (String) Location.
-- `password` (String, Sensitive) User password. Write-only; never read back from the API.
+- `password` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) User password. Write-only: sent to Directus on create/update but never stored in state or read back. Because Terraform can't diff a value it doesn't store, bump `password_version` (alongside changing `password`) to apply a new password.
+- `password_version` (String) Arbitrary trigger for `password`. Change it whenever you change `password` so Terraform runs an update and re-sends the value.
 - `role` (String) UUID of the user's role.
 - `status` (String) Account status (active, invited, draft, suspended, archived).
 - `tags` (List of String) Freeform tags on the user.
 - `theme_dark` (String) Dark theme name.
 - `theme_light` (String) Light theme name.
 - `title` (String) Job title.
+- `token` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Static access token for the user. Write-only: sent on create/update but never stored in state or read back. Bump `token_version` (alongside changing `token`) to apply a new token.
+- `token_version` (String) Arbitrary trigger for `token`. Change it whenever you change `token` so Terraform runs an update and re-sends the value.
 
 ### Read-Only
 
