@@ -89,8 +89,13 @@ func (r *fieldResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				},
 			},
 			"type": schema.StringAttribute{
-				MarkdownDescription: "Directus field type (e.g. string, integer, uuid, boolean, json).",
-				Required:            true,
+				MarkdownDescription: "Directus field type (e.g. string, integer, uuid, boolean, json). " +
+					"Changing this forces a new resource: Directus does not alter an existing column's " +
+					"type in place (a PATCH silently leaves the column unchanged), so the field must be recreated.",
+				Required: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"meta": schema.SingleNestedAttribute{
 				MarkdownDescription: "Directus field metadata (directus_fields).",

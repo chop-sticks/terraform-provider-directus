@@ -19,7 +19,7 @@ Manages a Directus field within a collection (directus_fields + the underlying c
 
 - `collection` (String) Collection the field belongs to. Changing this forces a new resource.
 - `field` (String) Field (column) name. Changing this forces a new resource.
-- `type` (String) Directus field type (e.g. string, integer, uuid, boolean, json).
+- `type` (String) Directus field type (e.g. string, integer, uuid, boolean, json). Changing this forces a new resource: Directus does not alter an existing column's type in place (a PATCH silently leaves the column unchanged), so the field must be recreated.
 
 ### Optional
 
