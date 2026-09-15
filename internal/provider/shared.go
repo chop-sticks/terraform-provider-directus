@@ -28,6 +28,22 @@ import (
 // mutation takes this lock. Reads are safe and stay unlocked.
 var schemaMu sync.Mutex
 
+// nullableString maps a Directus string into state, collapsing "" to null. The
+// Go client models nullable Directus string columns (a field's schema comment,
+// a meta note/interface, ...) as plain `string`, so a JSON null decodes to "".
+// For Optional+Computed attributes that is indistinguishable from an unset
+// value the plan carries as null; returning types.StringValue("") would then
+// trip "inconsistent result after apply: was null, but now \"\"". Directus
+// treats empty and null identically for these fields, so normalizing "" to null
+// is lossless. Use it only for genuinely nullable attributes — never for ones
+// with a non-empty default (e.g. a collection's collapse).
+func nullableString(s string) types.String {
+	if s == "" {
+		return types.StringNull()
+	}
+	return types.StringValue(s)
+}
+
 // mapToNormalized marshals a free-form Directus object into a jsontypes
 // Normalized value for storage in state. An empty/nil map becomes null so
 // unset blobs don't show spurious "{}" diffs. Normalized compares JSON
@@ -101,6 +117,81 @@ func importInt64ID(ctx context.Context, request resource.ImportStateRequest, res
 // erroring. Revisit if the client gains typed errors.
 func isNotFound(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "status: 404")
+}
+
+// isForbidden reports whether err is a Directus 403 response. Directus answers
+// reads for a missing collection, field, or relation with 403 FORBIDDEN — never
+// 404 — and the body is identical to a genuine permission denial. A status
+// check therefore cannot distinguish "deleted out-of-band" (Terraform should
+// drop it from state and recreate) from "no access" (surface the error). The
+// *Gone helpers below disambiguate via list membership: a schema object absent
+// from its (readable) listing is genuinely gone.
+func isForbidden(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "status: 403")
+}
+
+// collectionGone reports whether a collection read error means the collection
+// no longer exists (404, or a 403 with the collection absent from the listing).
+func collectionGone(client *directus.Client, name string, readErr error) bool {
+	if isNotFound(readErr) {
+		return true
+	}
+	if !isForbidden(readErr) {
+		return false
+	}
+	cols, err := client.GetCollections()
+	if err != nil {
+		return false
+	}
+	for _, c := range cols {
+		if c.Collection == name {
+			return false
+		}
+	}
+	return true
+}
+
+// fieldGone reports whether a field read error means the field no longer exists
+// (404, or a 403 with the field absent from its collection's field listing).
+func fieldGone(client *directus.Client, collection, name string, readErr error) bool {
+	if isNotFound(readErr) {
+		return true
+	}
+	if !isForbidden(readErr) {
+		return false
+	}
+	fields, err := client.GetFieldsByCollection(collection)
+	if err != nil {
+		return false
+	}
+	for _, f := range fields {
+		if f.Field == name {
+			return false
+		}
+	}
+	return true
+}
+
+// relationGone reports whether a relation read error means the relation no
+// longer exists (404, or a 403 with the relation absent from its collection's
+// relation listing).
+func relationGone(client *directus.Client, collection, field string, readErr error) bool {
+	if isNotFound(readErr) {
+		return true
+	}
+	if !isForbidden(readErr) {
+		return false
+	}
+	rels, err := client.GetRelationsByCollection(collection)
+	if err != nil {
+		return false
+	}
+	for _, rel := range rels {
+		if rel.Field == field {
+			return false
+		}
+	}
+	return true
 }
 
 // anyToStringID normalizes a Directus relational field into a string id.

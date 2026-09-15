@@ -178,7 +178,7 @@ func (r *fieldResource) Read(ctx context.Context, request resource.ReadRequest, 
 
 	field, err := r.client.GetFieldByCollectionAndName(state.Collection.ValueString(), state.Field.ValueString())
 	if err != nil {
-		if isNotFound(err) {
+		if fieldGone(r.client, state.Collection.ValueString(), state.Field.ValueString(), err) {
 			response.State.RemoveResource(ctx)
 			return
 		}
@@ -337,11 +337,11 @@ func fieldToModel(ctx context.Context, f *directus.Field, includeMeta, includeSc
 		special, d := types.ListValueFrom(ctx, types.StringType, f.Meta.Special)
 		diags.Append(d...)
 		model.Meta = &fieldMetaModel{
-			Interface:         types.StringValue(f.Meta.Interface),
-			Display:           types.StringValue(f.Meta.Display),
-			Note:              types.StringValue(f.Meta.Note),
-			Width:             types.StringValue(f.Meta.Width),
-			Group:             types.StringValue(f.Meta.Group),
+			Interface:         nullableString(f.Meta.Interface),
+			Display:           nullableString(f.Meta.Display),
+			Note:              nullableString(f.Meta.Note),
+			Width:             nullableString(f.Meta.Width),
+			Group:             nullableString(f.Meta.Group),
 			Hidden:            types.BoolValue(f.Meta.Hidden),
 			Readonly:          types.BoolValue(f.Meta.Readonly),
 			Required:          types.BoolValue(f.Meta.Required),
@@ -351,7 +351,7 @@ func fieldToModel(ctx context.Context, f *directus.Field, includeMeta, includeSc
 			Options:           mapToNormalized(f.Meta.Options),
 			DisplayOptions:    mapToNormalized(f.Meta.DisplayOptions),
 			Validation:        mapToNormalized(f.Meta.Validation),
-			ValidationMessage: types.StringValue(f.Meta.ValidationMessage),
+			ValidationMessage: nullableString(f.Meta.ValidationMessage),
 		}
 	}
 
@@ -363,7 +363,7 @@ func fieldToModel(ctx context.Context, f *directus.Field, includeMeta, includeSc
 			IsNullable:   types.BoolValue(f.Schema.IsNullable),
 			IsUnique:     types.BoolValue(f.Schema.IsUnique),
 			IsPrimaryKey: types.BoolValue(f.Schema.IsPrimaryKey),
-			Comment:      types.StringValue(f.Schema.Comment),
+			Comment:      nullableString(f.Schema.Comment),
 		}
 	}
 

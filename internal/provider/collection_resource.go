@@ -255,7 +255,7 @@ func (r *collectionResource) Read(ctx context.Context, request resource.ReadRequ
 
 	col, err := r.client.GetCollectionByName(state.Collection.ValueString())
 	if err != nil {
-		if isNotFound(err) {
+		if collectionGone(r.client, state.Collection.ValueString(), err) {
 			response.State.RemoveResource(ctx)
 			return
 		}
@@ -364,23 +364,23 @@ func collectionToModel(col *directus.Collection, includeMeta, includeSchema bool
 	}
 	if includeMeta && col.Meta != nil {
 		model.Meta = &collectionMetaModel{
-			Icon:            types.StringValue(col.Meta.Icon),
-			Note:            types.StringValue(col.Meta.Note),
-			Color:           types.StringValue(col.Meta.Color),
-			DisplayTemplate: types.StringValue(col.Meta.DisplayTemplate),
+			Icon:            nullableString(col.Meta.Icon),
+			Note:            nullableString(col.Meta.Note),
+			Color:           nullableString(col.Meta.Color),
+			DisplayTemplate: nullableString(col.Meta.DisplayTemplate),
 			Hidden:          types.BoolValue(col.Meta.Hidden),
 			Singleton:       types.BoolValue(col.Meta.Singleton),
-			SortField:       types.StringValue(col.Meta.SortField),
-			Group:           types.StringValue(col.Meta.Group),
+			SortField:       nullableString(col.Meta.SortField),
+			Group:           nullableString(col.Meta.Group),
 			Collapse:        types.StringValue(col.Meta.Collapse),
-			PreviewURL:      types.StringValue(col.Meta.PreviewURL),
+			PreviewURL:      nullableString(col.Meta.PreviewURL),
 		}
 	}
 	if includeSchema && col.Schema != nil {
 		model.Schema = &collectionSchemaModel{
 			Name:    types.StringValue(col.Schema.Name),
-			Schema:  types.StringValue(col.Schema.Schema),
-			Comment: types.StringValue(col.Schema.Comment),
+			Schema:  nullableString(col.Schema.Schema),
+			Comment: nullableString(col.Schema.Comment),
 		}
 	}
 	return model

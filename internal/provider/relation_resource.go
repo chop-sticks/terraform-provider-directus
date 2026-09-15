@@ -151,7 +151,7 @@ func (r *relationResource) Read(ctx context.Context, request resource.ReadReques
 
 	relation, err := r.client.GetRelation(state.Collection.ValueString(), state.Field.ValueString())
 	if err != nil {
-		if isNotFound(err) {
+		if relationGone(r.client, state.Collection.ValueString(), state.Field.ValueString(), err) {
 			response.State.RemoveResource(ctx)
 			return
 		}
@@ -278,28 +278,28 @@ func relationToModel(ctx context.Context, rel *directus.Relation, includeMeta, i
 		allowed, d := types.ListValueFrom(ctx, types.StringType, rel.Meta.OneAllowedCollections)
 		diags.Append(d...)
 		model.Meta = &relationMetaModel{
-			JunctionField:         types.StringValue(rel.Meta.JunctionField),
-			ManyCollection:        types.StringValue(rel.Meta.ManyCollection),
-			ManyField:             types.StringValue(rel.Meta.ManyField),
+			JunctionField:         nullableString(rel.Meta.JunctionField),
+			ManyCollection:        nullableString(rel.Meta.ManyCollection),
+			ManyField:             nullableString(rel.Meta.ManyField),
 			OneAllowedCollections: allowed,
-			OneCollection:         types.StringValue(rel.Meta.OneCollection),
-			OneCollectionField:    types.StringValue(rel.Meta.OneCollectionField),
-			OneDeselectAction:     types.StringValue(rel.Meta.OneDeselectAction),
-			OneField:              types.StringValue(rel.Meta.OneField),
-			SortField:             types.StringValue(rel.Meta.SortField),
+			OneCollection:         nullableString(rel.Meta.OneCollection),
+			OneCollectionField:    nullableString(rel.Meta.OneCollectionField),
+			OneDeselectAction:     nullableString(rel.Meta.OneDeselectAction),
+			OneField:              nullableString(rel.Meta.OneField),
+			SortField:             nullableString(rel.Meta.SortField),
 		}
 	}
 
 	if includeSchema && rel.Schema != nil {
 		model.Schema = &relationSchemaModel{
-			Column:           types.StringValue(rel.Schema.Column),
-			ConstraintName:   types.StringValue(rel.Schema.ConstraintName),
-			ForeignKeyColumn: types.StringValue(rel.Schema.ForeignKeyColumn),
-			ForeignKeySchema: types.StringValue(rel.Schema.ForeignKeySchema),
-			ForeignKeyTable:  types.StringValue(rel.Schema.ForeignKeyTable),
-			OnDelete:         types.StringValue(rel.Schema.OnDelete),
-			OnUpdate:         types.StringValue(rel.Schema.OnUpdate),
-			Table:            types.StringValue(rel.Schema.Table),
+			Column:           nullableString(rel.Schema.Column),
+			ConstraintName:   nullableString(rel.Schema.ConstraintName),
+			ForeignKeyColumn: nullableString(rel.Schema.ForeignKeyColumn),
+			ForeignKeySchema: nullableString(rel.Schema.ForeignKeySchema),
+			ForeignKeyTable:  nullableString(rel.Schema.ForeignKeyTable),
+			OnDelete:         nullableString(rel.Schema.OnDelete),
+			OnUpdate:         nullableString(rel.Schema.OnUpdate),
+			Table:            nullableString(rel.Schema.Table),
 		}
 	}
 
